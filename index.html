@@ -110,17 +110,17 @@
 
   // ZORLUK: Emre güçlü
   const playerSpeed = 520;        // senin hızın
-  const aiMaxSpeed  = 650;        // robot daha hızlı
-  const aiReaction  = 0.14;       // küçük = daha hızlı tepki (zor)
-  const aiAimError  = 6;          // küçük = daha isabetli (zor)
+  const aiMaxSpeed  = 820;        // robot daha hızlı
+  const aiReaction  = 0.09;       // küçük = daha hızlı tepki (zor)
+  const aiAimError  = 2;          // küçük = daha isabetli (zor)
 
   // Top hızları
-  let ballBaseSpeed = 460;        // başlangıç
-  const ballMaxSpeed = 980;
+  let ballBaseSpeed = 620;        // başlangıç
+  const ballMaxSpeed = 1250;
 
   // Ralli uzadıkça hızlanma (SAYI OLMADAN)
-  const rallySpeedEverySec = 2.2; // her 2.2 saniyede bir hız artışı
-  const rallySpeedAdd = 22;       // artış miktarı
+  const rallySpeedEverySec = 1.4; // her 2.2 saniyede bir hız artışı
+  const rallySpeedAdd = 34;       // artış miktarı
 
   let left = { y: H/2 - paddleH/2, vy: 0 };
   let right = { y: H/2 - paddleH/2, vy: 0 };
