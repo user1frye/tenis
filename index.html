@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tenis Oyunu - Asena vs Emre (Robot)</title>
+  <style>
+    :root { color-scheme: dark; }
+    body{
+      margin:0; min-height:100vh; display:grid; place-items:center;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background:#0b1220; color:#e6edf3;
+    }
+    .wrap{
+      width:min(920px, 94vw);
+      background:#101a30;
+      border:1px solid #223055;
+      border-radius:18px;
+      padding:16px;
+      box-shadow:0 12px 40px rgba(0,0,0,.35);
+    }
+    .top{
+      display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:space-between;
+      margin-bottom:10px;
+    }
+    .title{ font-size:18px; font-weight:800; letter-spacing:.2px; }
+    .hint{ opacity:.85; font-size:13px; }
+    canvas{
+      width:100%; height:auto; display:block;
+      background:#050a14;
+      border:1px solid #223055;
+      border-radius:14px;
+    }
+    .bar{
+      display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;
+      margin-top:10px;
+    }
+    .pill{
+      padding:8px 12px;
+      border:1px solid #2b3c6a;
+      background:#0e1730;
+      border-radius:999px;
+      font-weight:650;
+    }
+    .btn{
+      cursor:pointer;
+      padding:10px 14px;
+      border-radius:12px;
+      border:1px solid #2b3c6a;
+      background:#162344;
+      color:#e6edf3;
+      font-weight:700;
+    }
+    .btn:active{ transform: translateY(1px); }
+    #toast{
+      margin-top:10px;
+      min-height:22px;
+      font-weight:800;
+      letter-spacing:.2px;
+      opacity:.95;
+      text-align:center;
+    }
+    kbd{
+      border:1px solid #2b3c6a; border-bottom-width:3px;
+      padding:1px 6px; border-radius:6px; background:#0e1730;
+      font-weight:700; font-size:12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="title">Tenis (Pong): Asena (Sen) vs Emre (Robot)</div>
+      <div class="hint">Kontrol: <kbd>W</kbd>/<kbd>S</kbd> veya <kbd>↑</kbd>/<kbd>↓</kbd> · Boşluk: Başlat/Durdur</div>
+    </div>
+
+    <canvas id="game" width="900" height="520"></canvas>
+
+    <div class="bar">
+      <div class="pill">Asena: <span id="sLeft">0</span></div>
+      <div class="pill">Emre (Robot): <span id="sRight">0</span></div>
+      <button class="btn" id="reset">Sıfırla</button>
+    </div>
+
+    <div id="toast"></div>
+  </div>
+
+<script>
+(() => {
+  const c = document.getElementById("game");
+  const ctx = c.getContext("2d");
+
+  const sLeftEl  = document.getElementById("sLeft");
+  const sRightEl = document.getElementById("sRight");
+  const toastEl  = document.getElementById("toast");
+  const resetBtn = document.getElementById("reset");
+
+  const W = c.width, H = c.height;
+
+  // Oyun ayarları
+  const paddleW = 14, paddleH = 110;
+  const leftX  = 40;
+  const rightX = W - 40 - paddleW;
+
+  const netW = 6;
+  const netGap = 12;
+
+  const ballR = 9;
+
+  let left = { y: H/2 - paddleH/2, vy: 0 };
+  let right = { y: H/2 - paddleH/2, vy: 0 };
+
+  let ball, running = true;
+  let scoreL = 0, scoreR = 0;
+
+  // hızlar
+  const playerSpeed = 520;   // px/s
+  let ballBaseSpeed = 420;   // px/s (zamanla artar)
+  const aiMaxSpeed  = 460;   // robot max
+
+  function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
+
+  function toast(msg){
+    toastEl.textContent = msg;
+    if (msg){
+      clearTimeout(toast._t);
+      toast._t = setTimeout(() => { toastEl.textContent = ""; }, 1200);
+    }
+  }
+
+  function resetBall(direction){
+    // direction: +1 sağa (robot tarafına), -1 sola (player tarafına)
+    const angle = (Math.random() * 0.9 - 0.45); // -0.45..0.45 rad arası
+    const speed = ballBaseSpeed;
+    ball = {
+      x: W/2, y: H/2,
+      vx: Math.cos(angle) * speed * direction,
+      vy: Math.sin(angle) * speed
+    };
+  }
+
+  function fullReset(){
+    scoreL = 0; scoreR = 0;
+    ballBaseSpeed = 420;
+    left.y = H/2 - paddleH/2;
+    right.y = H/2 - paddleH/2;
+    sLeftEl.textContent = scoreL;
+    sRightEl.textContent = scoreR;
+    toast("");
+    resetBall(Math.random() < 0.5 ? 1 : -1);
+  }
+
+  function drawCourt(){
+    // zemin
+    ctx.clearRect(0,0,W,H);
+
+    // kenar çizgileri
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = "#223055";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(10,10,W-20,H-20);
+
+    // orta file
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = "#2b3c6a";
+    for (let y=20; y<H-20; y += netGap){
+      ctx.fillRect(W/2 - netW/2, y, netW, netGap/2);
+    }
+
+    // orta çizgi hafif
+    ctx.globalAlpha = 0.12;
+    ctx.beginPath();
+    ctx.moveTo(W/2, 20);
+    ctx.lineTo(W/2, H-20);
+    ctx.strokeStyle = "#8ab4ff";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawPaddles(){
+    // Sol (Asena)
+    ctx.fillStyle = "#8fffbc";
+    ctx.fillRect(leftX, left.y, paddleW, paddleH);
+
+    // Sağ (Emre robot)
+    ctx.fillStyle = "#ffb86b";
+    ctx.fillRect(rightX, right.y, paddleW, paddleH);
+  }
+
+  function drawBall(){
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ballR, 0, Math.PI*2);
+    ctx.fillStyle = "#e6edf3";
+    ctx.fill();
+  }
+
+  function reflectFromPaddle(paddleY, isLeft){
+    // çarpma noktasına göre açı değişsin
+    const paddleCenter = paddleY + paddleH/2;
+    const dy = (ball.y - paddleCenter) / (paddleH/2); // -1..1
+    const maxAngle = 0.95; // rad
+    const angle = dy * maxAngle;
+
+    // hız biraz artsın
+    const speed = Math.min(820, Math.hypot(ball.vx, ball.vy) * 1.05);
+
+    const dir = isLeft ? +1 : -1; // sol vurunca sağa gider
+    ball.vx = Math.cos(angle) * speed * dir;
+    ball.vy = Math.sin(angle) * speed;
+
+    // küçük bir "spin" hissi
+    ball.vy += (isLeft ? left.vy : right.vy) * 0.08;
+  }
+
+  // Kontroller
+  const keys = new Set();
+  window.addEventListener("keydown", (e) => {
+    const k = e.key.toLowerCase();
+    keys.add(k);
+    if (k === " ") { running = !running; toast(running ? "Devam" : "Durdu"); }
+  });
+  window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
+
+  resetBtn.addEventListener("click", fullReset);
+
+  function updatePlayer(dt){
+    let dir = 0;
+    if (keys.has("w") || keys.has("arrowup")) dir -= 1;
+    if (keys.has("s") || keys.has("arrowdown")) dir += 1;
+
+    left.vy = dir * playerSpeed;
+    left.y += left.vy * dt;
+    left.y = clamp(left.y, 20, H - 20 - paddleH);
+  }
+
+  function updateAI(dt){
+    // robot topu takip etsin ama insan gibi gecikmeli
+    const target = ball.y - paddleH/2;
+    const diff = target - right.y;
+
+    // top sağa gidiyorsa daha agresif, sola gidiyorsa biraz yavaş
+    const aggression = ball.vx > 0 ? 1.0 : 0.55;
+
+    const speed = clamp(diff * 6.5, -aiMaxSpeed, aiMaxSpeed) * aggression;
+    right.vy = speed;
+
+    right.y += right.vy * dt;
+    right.y = clamp(right.y, 20, H - 20 - paddleH);
+  }
+
+  function updateBall(dt){
+    ball.x += ball.vx * dt;
+    ball.y += ball.vy * dt;
+
+    // üst-alt çarpma
+    if (ball.y - ballR <= 20) { ball.y = 20 + ballR; ball.vy *= -1; }
+    if (ball.y + ballR >= H - 20) { ball.y = (H - 20) - ballR; ball.vy *= -1; }
+
+    // sol raket çarpma
+    if (ball.x - ballR <= leftX + paddleW &&
+        ball.x - ballR >= leftX &&
+        ball.y >= left.y && ball.y <= left.y + paddleH &&
+        ball.vx < 0) {
+      ball.x = leftX + paddleW + ballR;
+      reflectFromPaddle(left.y, true);
+    }
+
+    // sağ raket çarpma
+    if (ball.x + ballR >= rightX &&
+        ball.x + ballR <= rightX + paddleW &&
+        ball.y >= right.y && ball.y <= right.y + paddleH &&
+        ball.vx > 0) {
+      ball.x = rightX - ballR;
+      reflectFromPaddle(right.y, false);
+    }
+
+    // sayı oldu mu?
+    if (ball.x + ballR < 0) {
+      // robot sayı attı
+      scoreR += 1;
+      sRightEl.textContent = scoreR;
+      toast("Emre kazandı — Emre sayı attı");
+      ballBaseSpeed = Math.min(720, ballBaseSpeed + 18);
+      resetBall(-1); // topu sola doğru başlat (player tarafına)
+    }
+    if (ball.x - ballR > W) {
+      // oyuncu sayı attı
+      scoreL += 1;
+      sLeftEl.textContent = scoreL;
+      toast("Asena kazandı — Asena sayı attı");
+      ballBaseSpeed = Math.min(720, ballBaseSpeed + 18);
+      resetBall(+1); // topu sağa doğru başlat (robot tarafına)
+    }
+  }
+
+  function render(){
+    drawCourt();
+    drawPaddles();
+    drawBall();
+  }
+
+  let last = 0;
+  function loop(ts){
+    const t = ts / 1000;
+    const dt = last ? Math.min(0.03, t - last) : 0;
+    last = t;
+
+    if (running){
+      updatePlayer(dt);
+      updateAI(dt);
+      updateBall(dt);
+    }
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  fullReset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
